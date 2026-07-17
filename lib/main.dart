@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as path;
 
@@ -511,7 +512,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _simulateBarcodeScan(),
+                  onPressed: () => _scanBarcode(),
                   icon: const Icon(Icons.qr_code_scanner, size: 16),
                   label: const Text("Scan"),
                   style: ElevatedButton.styleFrom(
@@ -1089,53 +1090,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  void _simulateBarcodeScan() {
-    final scanController = TextEditingController(text: "890123456789");
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.qr_code_scanner, color: Colors.blueAccent),
-              SizedBox(width: 8),
-              Text("Simulate Scan"),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text("Enter a barcode mock number below to search or register:"),
-              TextField(controller: scanController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Barcode Number")),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-            ElevatedButton(
-              onPressed: () {
-                final inputCode = scanController.text.trim();
-                Navigator.pop(ctx);
-                if (inputCode.isNotEmpty) {
-                  final matchIndex = _medicines.indexWhere((m) => m.barcode == inputCode);
-                  if (matchIndex != -1) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Match found: ${_medicines[matchIndex].name}. Opening editor.")),
-                    );
-                    _openAddMedicineDialog(editMed: _medicines[matchIndex]);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("No match found. Registering a new item with this barcode.")),
-                    );
-                    _openAddMedicineDialog(editMed: Medicine(id: "", name: "", quantity: 0, expiry: DateTime.now().add(const Duration(days: 365)), barcode: inputCode));
-                  }
-                }
-              },
-              child: const Text("Submit Scan"),
-            )
-          ],
-        );
-      },
+  void _scanBarcode() async {
+    final scannedCode = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (context) => const BarcodeScannerScreen()),
     );
+    
+    if (scannedCode != null && scannedCode.isNotEmpty) {
+      final matchIndex = _medicines.indexWhere((m) => m.barcode == scannedCode);
+      if (matchIndex != -1) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Match found: ${_medicines[matchIndex].name}. Opening editor.")),
+          );
+        }
+        _openAddMedicineDialog(editMed: _medicines[matchIndex]);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("No match found. Registering a new item with this barcode.")),
+          );
+        }
+        _openAddMedicineDialog(editMed: Medicine(id: "", name: "", quantity: 0, expiry: DateTime.now().add(const Duration(days: 365)), barcode: scannedCode));
+      }
+    }
   }
 }
 
@@ -1353,6 +1331,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ------------------- BARCODE SCANNER SCREEN -------------------
+
+class BarcodeScannerScreen extends StatefulWidget {
+  const BarcodeScannerScreen({super.key});
+
+  @override
+  State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();
+}
+
+class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
+  final MobileScannerController controller = MobileScannerController();
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Scan Barcode', style: TextStyle(color: Colors.white)),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: MobileScanner(
+        controller: controller,
+        onDetect: (capture) {
+          final List<Barcode> barcodes = capture.barcodes;
+          if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+            final String code = barcodes.first.rawValue!;
+            controller.stop();
+            Navigator.pop(context, code);
+          }
+        },
       ),
     );
   }
