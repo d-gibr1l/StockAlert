@@ -404,7 +404,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
             Text(
               'inventory · expiry · supplier orders',
-              style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.85)),
+              style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
             ),
           ],
         ),
@@ -859,14 +859,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                       final targetMed = _medicines.firstWhere((m) => m.id == order.medicineId);
                                       targetMed.quantity += order.quantity;
                                       await DatabaseHelper.instance.updateMedicine(targetMed);
-                                      
-                                      if (mounted) {
+                                                
+                                      if (context.mounted) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(content: Text("Stock for ${targetMed.name} successfully increased by ${order.quantity} units.")),
                                         );
                                       }
                                     } catch (_) {
-                                      if (mounted) {
+                                      if (context.mounted) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(content: Text("Warning: Linked medicine could not be found, but status updated.")),
                                         );
@@ -991,7 +991,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       await DatabaseHelper.instance.updateMedicine(editMed);
                     }
                     
-                    if (mounted) Navigator.pop(ctx);
+                    if (ctx.mounted) Navigator.pop(ctx);
                     await _refreshData(); // Refresh UI with DB state
                   },
                   child: const Text("Save"),
@@ -1031,7 +1031,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     TextField(controller: supplierController, decoration: const InputDecoration(labelText: "Supplier Name")),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<Medicine>(
-                      value: selectedMedicine,
+                      initialValue: selectedMedicine,
                       decoration: const InputDecoration(labelText: "Select Medicine"),
                       items: _medicines.map((m) {
                         return DropdownMenuItem<Medicine>(
@@ -1072,7 +1072,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     
                     await DatabaseHelper.instance.insertOrder(newOrder);
 
-                    if (mounted) {
+                    if (ctx.mounted && context.mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text("Order placed to $sup for ${selectedMedicine.name} ($qty units)")),
