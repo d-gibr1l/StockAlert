@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized before calling database code
@@ -14,11 +15,16 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  runApp(const StockAlertApp());
+  final prefs = await SharedPreferences.getInstance();
+  final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+  runApp(StockAlertApp(isLoggedIn: isLoggedIn));
 }
 
 class StockAlertApp extends StatelessWidget {
-  const StockAlertApp({super.key});
+  final bool isLoggedIn;
+  
+  const StockAlertApp({super.key, required this.isLoggedIn});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +40,7 @@ class StockAlertApp extends StatelessWidget {
         ),
         fontFamily: 'Inter',
       ),
-      home: const LoginScreen(),
+      home: isLoggedIn ? const MainNavigationScreen() : const LoginScreen(),
     );
   }
 }
@@ -521,6 +527,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            tooltip: 'Logout',
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('isLoggedIn', false);
+              if (context.mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: screens[_currentIndex],
@@ -1546,6 +1567,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _rememberMe = false;
 
   void _login() async {
     setState(() => _isLoading = true);
@@ -1559,6 +1581,10 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (user != null) {
+      if (_rememberMe) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+      }
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -1621,6 +1647,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
                 ),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                title: const Text("Remember me"),
+                value: _rememberMe,
+                onChanged: (newValue) {
+                  setState(() {
+                    _rememberMe = newValue ?? false;
+                  });
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 24),
               if (_isLoading)
