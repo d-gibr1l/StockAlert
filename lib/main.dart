@@ -1614,10 +1614,9 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(
-                Icons.local_pharmacy,
-                size: 80,
-                color: Color(0xFF0F2B3D),
+              Image.asset(
+                'assets/logo.png',
+                height: 120,
               ),
               const SizedBox(height: 16),
               const Text(
