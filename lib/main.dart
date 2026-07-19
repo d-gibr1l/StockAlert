@@ -17,14 +17,16 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+  final staffId = prefs.getString('staffId') ?? '';
 
-  runApp(StockAlertApp(isLoggedIn: isLoggedIn));
+  runApp(StockAlertApp(isLoggedIn: isLoggedIn, staffId: staffId));
 }
 
 class StockAlertApp extends StatelessWidget {
   final bool isLoggedIn;
+  final String staffId;
   
-  const StockAlertApp({super.key, required this.isLoggedIn});
+  const StockAlertApp({super.key, required this.isLoggedIn, required this.staffId});
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +42,7 @@ class StockAlertApp extends StatelessWidget {
         ),
         fontFamily: 'Inter',
       ),
-      home: isLoggedIn ? const MainNavigationScreen() : const LoginScreen(),
+      home: isLoggedIn ? MainNavigationScreen(staffId: staffId) : const LoginScreen(),
     );
   }
 }
@@ -105,6 +107,7 @@ class Medicine {
   double sellingPrice;
   String supplier;
   String category;
+  String? addedByStaffId;
 
   Medicine({
     required this.id,
@@ -116,6 +119,7 @@ class Medicine {
     this.sellingPrice = 0.0,
     this.supplier = '',
     this.category = '',
+    this.addedByStaffId,
   });
 
   // Convert a Medicine into a Map for SQLite
@@ -130,6 +134,7 @@ class Medicine {
       'sellingPrice': sellingPrice,
       'supplier': supplier,
       'category': category,
+      'addedByStaffId': addedByStaffId,
     };
   }
 
@@ -145,6 +150,7 @@ class Medicine {
       sellingPrice: map['sellingPrice'],
       supplier: map['supplier'],
       category: map['category'],
+      addedByStaffId: map['addedByStaffId'],
     );
   }
 }
@@ -158,6 +164,7 @@ class SupplierOrder {
   String notes;
   String status;
   DateTime date;
+  String? addedByStaffId;
 
   SupplierOrder({
     required this.id,
@@ -168,6 +175,7 @@ class SupplierOrder {
     this.notes = '',
     this.status = 'Ordered',
     required this.date,
+    this.addedByStaffId,
   });
 
   Map<String, dynamic> toMap() {
@@ -180,6 +188,7 @@ class SupplierOrder {
       'notes': notes,
       'status': status,
       'date': date.toIso8601String(),
+      'addedByStaffId': addedByStaffId,
     };
   }
 
@@ -193,6 +202,7 @@ class SupplierOrder {
       notes: map['notes'],
       status: map['status'],
       date: DateTime.parse(map['date']),
+      addedByStaffId: map['addedByStaffId'],
     );
   }
 }
@@ -217,7 +227,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       dbFilePath,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -239,6 +249,10 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE users ADD COLUMN role TEXT');
       await db.execute('ALTER TABLE users ADD COLUMN staffId TEXT');
       await db.execute('ALTER TABLE users ADD COLUMN pharmacyName TEXT');
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE medicines ADD COLUMN addedByStaffId TEXT');
+      await db.execute('ALTER TABLE orders ADD COLUMN addedByStaffId TEXT');
     }
   }
 
@@ -266,7 +280,8 @@ class DatabaseHelper {
         purchasePrice REAL,
         sellingPrice REAL,
         supplier TEXT,
-        category TEXT
+        category TEXT,
+        addedByStaffId TEXT
       )
     ''');
 
@@ -279,7 +294,8 @@ class DatabaseHelper {
         quantity INTEGER NOT NULL,
         notes TEXT,
         status TEXT NOT NULL,
-        date TEXT NOT NULL
+        date TEXT NOT NULL,
+        addedByStaffId TEXT
       )
     ''');
   }
@@ -363,7 +379,8 @@ class DatabaseHelper {
 // ------------------- MAIN CONTAINER SCREEN -------------------
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+  final String staffId;
+  const MainNavigationScreen({super.key, required this.staffId});
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
@@ -1177,6 +1194,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                         (m) => m.id == order.medicineId,
                                       );
                                       targetMed.quantity += order.quantity;
+                                      targetMed.addedByStaffId = widget.staffId;
                                       await DatabaseHelper.instance
                                           .updateMedicine(targetMed);
 
@@ -1365,6 +1383,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                             double.tryParse(sellController.text) ?? 0.0,
                         supplier: supplierController.text.trim(),
                         category: categoryController.text.trim(),
+                        addedByStaffId: widget.staffId,
                       );
                       await DatabaseHelper.instance.insertMedicine(newMed);
                     } else {
@@ -1379,8 +1398,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                           double.tryParse(sellController.text) ?? 0.0;
                       editMed.supplier = supplierController.text.trim();
                       editMed.category = categoryController.text.trim();
+                      editMed.addedByStaffId = widget.staffId;
 
-                      await DatabaseHelper.instance.updateMedicine(editMed);
+                      if (editMed.id.isEmpty) {
+                        editMed.id = DateTime.now().millisecondsSinceEpoch.toString();
+                        await DatabaseHelper.instance.insertMedicine(editMed);
+                      } else {
+                        await DatabaseHelper.instance.updateMedicine(editMed);
+                      }
                     }
 
                     if (ctx.mounted) Navigator.pop(ctx);
@@ -1485,6 +1510,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       quantity: qty,
                       notes: notesController.text.trim(),
                       date: DateTime.now(),
+                      addedByStaffId: widget.staffId,
                     );
 
                     await DatabaseHelper.instance.insertOrder(newOrder);
@@ -1581,14 +1607,15 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('staffId', user.staffId);
       if (_rememberMe) {
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', true);
       }
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+          MaterialPageRoute(builder: (context) => MainNavigationScreen(staffId: user.staffId)),
         );
       }
     } else {
